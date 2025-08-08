@@ -9,6 +9,7 @@ services:
       - DB_PASS=ttrss # use the same password defined in `database.postgres`
       - PUID=1000
       - PGID=1000
+      - ALLOW_PORTS=1200
     volumes:
       - cache:/var/www/cache/
     networks:
@@ -27,22 +28,22 @@ services:
       timeout: 10s
       retries: 5
 
-  service.mercury: # set Mercury Parser API endpoint to `service.mercury:3000` on TTRSS plugin setting page
-    image: wangqiru/mercury-parser-api:latest
-    container_name: mercury
-    networks:
-      - public_access
-      - service_only
-    restart: always
-
-  service.opencc: # set OpenCC API endpoint to `service.opencc:3000` on TTRSS plugin setting page
-    image: wangqiru/opencc-api-server:latest
-    container_name: opencc
-    environment:
-      - NODE_ENV=production
-    networks:
-      - service_only
-    restart: always
+  # service.mercury: # set Mercury Parser API endpoint to `service.mercury:3000` on TTRSS plugin setting page
+  #   image: wangqiru/mercury-parser-api:latest
+  #   container_name: mercury
+  #   networks:
+  #     - public_access
+  #     - service_only
+  #   restart: always
+  #
+  # service.opencc: # set OpenCC API endpoint to `service.opencc:3000` on TTRSS plugin setting page
+  #   image: wangqiru/opencc-api-server:latest
+  #   container_name: opencc
+  #   environment:
+  #     - NODE_ENV=production
+  #   networks:
+  #     - service_only
+  #   restart: always
 
   database.postgres:
     image: postgres:16-alpine
@@ -70,22 +71,60 @@ services:
   #     - WATCHTOWER_POLL_INTERVAL=86400
   #   restart: always
 
-  # service.rsshub:
-  #   container_name: rsshub
-  #   image: diygod/rsshub:latest
-  #   environment:
-  #     NODE_ENV: production
-  #     DEBUG_INFO: false
-  #     LOGGER_LEVEL: error
-  #     NO_LOGFILES: true
-  #   networks:
-  #     - service_only
-  #   expose:
-  #     - 3000
-  #   restart: unless-stopped
+  rsshub:
+    container_name: rsshub
+    image: diygod/rsshub:latest
+    environment:
+      NODE_ENV: production
+      PUPPETEER_WS_ENDPOINT: "ws://browserless:3000" # marked
+      CACHE_TYPE: redis
+      REDIS_URL: "redis://redis:6379/"
+      DEBUG_INFO: false
+      LOGGER_LEVEL: error
+      NO_LOGFILES: true
+    networks:
+      - public_access
+      - service_only
+    # expose:
+    #   - 1200
+    restart: unless-stopped
+    depends_on:
+      - browserless
+      - redis
+
+  browserless: # marked
+    container_name: browserless # marked
+    image: browserless/chrome # marked
+    restart: always # marked
+    ulimits: # marked
+        core: # marked
+            hard: 0 # marked
+            soft: 0 # marked
+    healthcheck: # marked
+        test: ["CMD", "curl", "-f", "http://localhost:3000/pressure"] # marked
+        interval: 30s # marked
+        timeout: 10s # marked
+        retries: 3 # marked
+    networks:
+      - service_only
+
+  redis:
+    image: redis:alpine
+    restart: always
+    volumes:
+        - redis-data:/data
+    healthcheck:
+        test: ["CMD", "redis-cli", "ping"]
+        interval: 30s
+        timeout: 10s
+        retries: 5
+        start_period: 5s
+    networks:
+      - service_only
 
 volumes:
   cache:
+  redis-data:
 
 networks:
   public_access: # Provide the access for ttrss UI
